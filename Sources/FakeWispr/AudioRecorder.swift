@@ -5,6 +5,7 @@ class AudioRecorder {
     private var samples: [Float] = []
     private let targetSampleRate: Double = 16000
     private var isRecording = false
+    private var converter: AVAudioConverter?
 
     func startRecording() {
         samples = []
@@ -20,9 +21,11 @@ class AudioRecorder {
             interleaved: false
         ) else { return }
 
+        converter = AVAudioConverter(from: inputFormat, to: whisperFormat)
+
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self, self.isRecording else { return }
-            self.convert(buffer: buffer, from: inputFormat, to: whisperFormat)
+            self.convert(buffer: buffer, to: whisperFormat)
         }
 
         do {
@@ -36,13 +39,14 @@ class AudioRecorder {
         isRecording = false
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        converter = nil
         return samples
     }
 
-    private func convert(buffer: AVAudioPCMBuffer, from srcFormat: AVAudioFormat, to dstFormat: AVAudioFormat) {
-        guard let converter = AVAudioConverter(from: srcFormat, to: dstFormat) else { return }
+    private func convert(buffer: AVAudioPCMBuffer, to dstFormat: AVAudioFormat) {
+        guard let converter else { return }
 
-        let ratio = dstFormat.sampleRate / srcFormat.sampleRate
+        let ratio = dstFormat.sampleRate / buffer.format.sampleRate
         let frameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 1)
         guard let converted = AVAudioPCMBuffer(pcmFormat: dstFormat, frameCapacity: frameCapacity) else { return }
 

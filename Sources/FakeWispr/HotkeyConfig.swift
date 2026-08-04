@@ -1,18 +1,20 @@
-import CoreGraphics
+import Carbon
 import Foundation
 
 struct HotkeyConfig: Codable, Equatable {
-    var keyCode: Int64
-    var modifierFlags: UInt64
+    var keyCode: UInt32       // macOS virtual key code (same values as Carbon)
+    var carbonModifiers: UInt32  // Carbon modifier mask (cmdKey, optionKey, etc.)
     var displayName: String
 
+    // Default: ⌥Space — works with Carbon (requires at least one modifier)
     static let defaultHotkey = HotkeyConfig(
-        keyCode: 61,          // Right Option
-        modifierFlags: 0,
-        displayName: "Right ⌥"
+        keyCode: 49,
+        carbonModifiers: UInt32(optionKey),
+        displayName: "⌥Space"
     )
 
-    static let userDefaultsKey = "hotkeyConfig"
+    // Use a new key to avoid conflicts with the old CGEventFlags-based format
+    private static let userDefaultsKey = "hotkeyConfigV2"
 
     static func load() -> HotkeyConfig {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),

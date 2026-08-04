@@ -6,13 +6,16 @@ class RecordingOverlay {
     func show(hotkey: String) {
         DispatchQueue.main.async {
             if self.panel == nil { self.buildPanel() }
+            self.repositionPanel()
             self.updateHotkey(hotkey)
+            (self.panel?.contentView as? OverlayContentView)?.startPulse()
             self.panel?.orderFrontRegardless()
         }
     }
 
     func hide() {
         DispatchQueue.main.async {
+            (self.panel?.contentView as? OverlayContentView)?.stopPulse()
             self.panel?.orderOut(nil)
         }
     }
@@ -23,15 +26,8 @@ class RecordingOverlay {
         let width: CGFloat = 260
         let height: CGFloat = 92
 
-        let mouseLocation = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
-            ?? NSScreen.main
-            ?? NSScreen.screens[0]
-        let x = screen.frame.midX - width / 2
-        let y = screen.visibleFrame.minY + 24
-
         let p = NSPanel(
-            contentRect: NSRect(x: x, y: y, width: width, height: height),
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -45,6 +41,18 @@ class RecordingOverlay {
         p.contentView = OverlayContentView(frame: NSRect(origin: .zero, size: CGSize(width: width, height: height)))
 
         self.panel = p
+    }
+
+    private func repositionPanel() {
+        guard let panel else { return }
+        let width = panel.frame.width
+        let mouseLocation = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
+            ?? NSScreen.main
+            ?? NSScreen.screens[0]
+        let x = screen.frame.midX - width / 2
+        let y = screen.visibleFrame.minY + 24
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     private func updateHotkey(_ hotkey: String) {
@@ -117,10 +125,10 @@ private class OverlayContentView: NSView {
             micIcon.centerYAnchor.constraint(equalTo: micPill.centerYAnchor),
         ])
 
-        startPulse()
     }
 
-    private func startPulse() {
+    fileprivate func startPulse() {
+        guard pulseTimer == nil else { return }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in
             guard let self else { return }
             NSAnimationContext.runAnimationGroup({ ctx in
@@ -133,6 +141,12 @@ private class OverlayContentView: NSView {
                 }
             })
         }
+    }
+
+    fileprivate func stopPulse() {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        micPill.layer?.backgroundColor = NSColor(white: 0.22, alpha: 0.95).cgColor
     }
 
     deinit { pulseTimer?.invalidate() }

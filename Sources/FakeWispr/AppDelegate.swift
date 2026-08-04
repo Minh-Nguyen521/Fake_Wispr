@@ -2,7 +2,7 @@ import AppKit
 import AVFoundation
 
 enum AppState {
-    case idle, recording, processing
+    case idle, loading, recording, processing
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -22,7 +22,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         textInjector = TextInjector()
 
         // Request mic permission upfront
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        if #available(macOS 14, *) {
+            AVAudioApplication.requestRecordPermission { _ in }
+        } else {
+            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        }
 
         hotkeyManager = HotkeyManager(
             onKeyDown: { [weak self] in
@@ -33,7 +37,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
 
-        Task { await transcriber.loadModel() }
+        setState(.loading)
+        Task {
+            await transcriber.loadModel()
+            await MainActor.run { setState(.idle) }
+        }
         hotkeyManager.start()
     }
 
@@ -47,7 +55,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(title)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(openPreferences), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "Check Permissions", action: #selector(checkPermissions), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
@@ -59,6 +66,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .idle:
             button.title = "𝍄"
             button.image = nil
+        case .loading:
+            button.title = "⋯"
+            button.image = nil
         case .recording:
             button.title = "🔴"
             button.image = nil
@@ -68,25 +78,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc func checkPermissions() {
-        let trusted = AXIsProcessTrusted()
-        let alert = NSAlert()
-        alert.messageText = trusted ? "✅ Accessibility: Granted" : "❌ Accessibility: Not Granted"
-        alert.informativeText = trusted
-            ? "Hotkey is active. Hold \(hotkeyManager.config.displayName) to dictate."
-            : "Go to System Settings → Privacy & Security → Accessibility → enable FakeWispr."
-        alert.alertStyle = trusted ? .informational : .warning
-        alert.addButton(withTitle: "OK")
-        NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
-    }
-
     @objc func openPreferences() {
-        if preferencesWindowController == nil {
-            preferencesWindowController = PreferencesWindowController(hotkeyManager: hotkeyManager)
-        }
+        preferencesWindowController = PreferencesWindowController(
+            hotkeyManager: hotkeyManager,
+            currentModel: transcriber.modelName,
+            currentLanguageCode: transcriber.languageCode,
+            currentTranslate: transcriber.translateToEnglish,
+            onModelChanged: { [weak self] name in self?.changeModel(name) },
+            onLanguageChanged: { [weak self] code in self?.transcriber.setLanguage(code) },
+            onTranslateChanged: { [weak self] enabled in self?.transcriber.setTranslate(enabled) }
+        )
         preferencesWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func changeModel(_ name: String) {
+        setState(.loading)
+        Task {
+            await transcriber.switchModel(to: name)
+            await MainActor.run { setState(.idle) }
+        }
     }
 
     @MainActor func startRecording() {

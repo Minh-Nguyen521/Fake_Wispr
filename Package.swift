@@ -13,7 +13,10 @@ let package = Package(
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "Sources/FakeWispr"
+            path: "Sources/FakeWispr",
+            linkerSettings: [
+                .linkedFramework("Carbon"),
+            ]
         ),
     ]
 )
