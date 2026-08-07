@@ -13,6 +13,7 @@ class WhisperTranscriber {
         "openai_whisper-medium.en",
         "openai_whisper-large-v3",
         "openai_whisper-large-v3_turbo",
+        "vinai/PhoWhisper-base",
     ]
 
     // (display name, ISO 639-1 code); nil code = auto-detect
@@ -54,7 +55,11 @@ class WhisperTranscriber {
     init() {
         modelName = UserDefaults.standard.string(forKey: Self.modelDefaultsKey) ?? Self.defaultModel
         let saved = UserDefaults.standard.string(forKey: Self.languageDefaultsKey)
-        languageCode = (saved == nil || saved == Self.autoDetectSentinel) ? nil : saved
+        if modelName == "vinai/PhoWhisper-base" && (saved == nil || saved == Self.autoDetectSentinel) {
+            languageCode = "vi"
+        } else {
+            languageCode = (saved == nil || saved == Self.autoDetectSentinel) ? nil : saved
+        }
         translateToEnglish = UserDefaults.standard.bool(forKey: Self.translateDefaultsKey)
     }
 
@@ -78,6 +83,9 @@ class WhisperTranscriber {
         isLoading = false
         modelName = name
         UserDefaults.standard.set(name, forKey: Self.modelDefaultsKey)
+        if name == "vinai/PhoWhisper-base" {
+            setLanguage("vi")
+        }
         await loadModel()
     }
 
